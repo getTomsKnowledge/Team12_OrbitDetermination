@@ -1,0 +1,11 @@
+# Task List
+
+1. Orbit Determination
+  a. Individual OD
+    i. For-Loop for smallest RMS value
+  b. Comparison of results
+  c. Selection of best data set (minimum reisidual rms)
+
+2. Estimation
+3. Verification
+4. Write-up
