@@ -1,0 +1,21 @@
+# Project Deliverables:
+
+
+# Here's a list of project deliverables:
+
+# Written Report:
+1. Written description
+  a. Brief Statement
+  b. Results summary
+2. Worked solutions/methods:
+  a. Procedures
+  b. Calculations
+3. Conclusion
+  a. Interpretation
+  b. Errors (sources)
+  c. Analysis limitations
+
+# Upload (in a single .pdf):
+1. Data synopsis
+2. Software files
+3. Member work breakdown
