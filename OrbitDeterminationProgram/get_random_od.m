@@ -1,0 +1,347 @@
+%% Initial Orbit Determination - Tom West, Team 12, ENAE441
+
+% Split data set into column vectors for speed/clarity:
+satC.observationNumbers = night1Data.opt2satCset4.observation_number;
+satC.datetimeList = night1Data.opt2satCset4.datetime;
+satC.azimuths = night1Data.opt2satCset4.azimuth_deg;
+satC.elevations = night1Data.opt2satCset4.elevation_deg;
+satC.ras = night1Data.opt2satCset4.right_ascension_deg;
+satC.declinations = night1Data.opt2satCset4.declination_deg;
+
+% Set up initial epoch:
+initialEpoch = night1Data.opt2satCset4.datetime(1);
+chileLLA.epoch = initialEpoch;
+
+% Set up site LLA:
+chileLLA.latitude_deg = night1Data.opt2satCset4.site_latitude_deg(1);
+chileLLA.longitude_deg = night1Data.opt2satCset4.site_longitude_deg(1);
+chileLLA.altitude_m = night1Data.opt2satCset4.site_altitude_m(1);
+chileObservatory = eci(chileLLA);
+
+% PREPARE RANDOM SAMPLE:
+
+% Get random sample of size N from observation set:
+totalOrbits = length(night1Data.opt2satCset4.datetime);
+sampleSize = 12;
+numberOfGroups = 3;
+K = 6;
+
+[begSamp, midSamp, endSamp] = random_split_observation_sample(totalOrbits, sampleSize, numberOfGroups);
+sampleList = [begSamp, midSamp, endSamp];
+%sampleVector = zeros(sampleSize, K);
+
+for n = 1:sampleSize
+    sampleVector.obsNumber(n) = satC.observationNumbers(sampleList(n));
+    sampleVector.datetimes(n) = satC.datetimeList(sampleList(n));
+    sampleVector.azimuths(n) = satC.azimuths(sampleList(n));
+    sampleVector.elevations(n) = satC.elevations(sampleList(n));
+    sampleVector.ras(n) = satC.ras(sampleList(n));
+    sampleVector.declinations(n) = satC.declinations(sampleList(n));
+end
+
+mixCounter = 0;
+
+% Comparative accuracy of sample combinations:
+
+% START TIMER:
+outOf = factorial(sampleSize)/(factorial(sampleSize-3)*factorial(3));
+
+waitbar(0, waitBar1, 'Starting first iteration with beginning, middle, end obs set.');
+waitX = 0;
+dX = 0.001;
+
+minRMS = 1*1e8;
+tic
+
+for n = 1:(sampleSize-2)    
+    for k = 1:(sampleSize - 1)
+        for l = 1:sampleSize
+
+            if ((k >= (n + 1)) && ((l >= (n + 2)) && (l >= (k + 1))))
+                mixCounter = mixCounter + 1;
+                waitMsg = sprintf('Processing mixed-time-period observation set. Count: %d / %d', mixCounter, outOf);
+                waitbar(waitX, waitBar1, waitMsg);
+                waitX = waitX + dX;
+
+
+                % Get nth observation set:
+
+                % First observation, n / "enn":
+                obs1.obsNumber = sampleVector.obsNumber(n);
+                obs1.epoch = sampleVector.datetimes(n);
+                obs1.azimuth_deg = sampleVector.azimuths(n);
+                obs1.elevation_deg = sampleVector.elevations(n);
+                obs1.range_m = 5000;
+                obs1.right_ascension_deg = sampleVector.ras(n);
+                obs1.declination_deg = sampleVector.declinations(n);
+                chile1.position_m = chileObservatory.position_m;
+                chile1.epoch = obs1.epoch;
+                chile1.latitude_deg = chileLLA.latitude_deg;
+                chile1.longitude_deg = chileLLA.longitude_deg;
+                chile1.altitude_m = chileLLA.altitude_m;
+                %obs1ECI = eci(obs1, chile1);
+                %obs1ECI.position_m = obs1ECI.position_m / norm(obs1ECI.position_m);
+                
+                t1 = second(chile1.epoch, 'secondofday');
+
+
+                % Second observation, k / "kay":
+                obs2.obsNumber = sampleVector.obsNumber(k);
+                obs2.epoch = sampleVector.datetimes(k);
+                obs2.azimuth_deg = sampleVector.azimuths(k);
+                obs2.elevation_deg = sampleVector.elevations(k);
+                obs2.range_m = 5000;
+                obs2.right_ascension_deg = sampleVector.ras(k);
+                obs2.declination_deg = sampleVector.declinations(k);
+                chile2.position_m = chileObservatory.position_m;
+                chile2.epoch = obs2.epoch;
+                chile2.latitude_deg = chileLLA.latitude_deg;
+                chile2.longitude_deg = chileLLA.longitude_deg;
+                chile2.altitude_m = chileLLA.altitude_m;
+                %obs2ECI = eci(obs2, chile2);
+                %obs2ECI.position_m = obs2ECI.position_m / norm(obs2ECI.position_m);
+
+                t2 = second(chile2.epoch, 'secondofday');
+
+                % Third observation, l / "ell":
+                obs3.obsNumber = sampleVector.obsNumber(l);
+                obs3.epoch = sampleVector.datetimes(l);
+                obs3.azimuth_deg = sampleVector.azimuths(l);
+                obs3.elevation_deg = sampleVector.elevations(l);
+                obs3.range_m = 5000;
+                obs3.right_ascension_deg = sampleVector.ras(l);
+                obs3.declination_deg = sampleVector.declinations(l);
+                chile3.position_m = chileObservatory.position_m;
+                chile3.epoch = obs3.epoch;
+                chile3.latitude_deg = chileLLA.latitude_deg;
+                chile3.longitude_deg = chileLLA.longitude_deg;
+                chile3.altitude_m = chileLLA.altitude_m;
+                %obs3ECI = eci(obs3, chile3);
+                %obs3ECI.position_m = obs3ECI.position_m / norm(obs3ECI.position_m);
+
+                t3 = second(chile3.epoch, 'secondofday');
+
+                % Get line of sight vectors:
+                [los1, los2, los3] = get_los(...
+                    obs1.right_ascension_deg, obs1.declination_deg, ...
+                    obs2.right_ascension_deg, obs2.declination_deg, ...
+                    obs3.right_ascension_deg, obs3.declination_deg);
+
+                [o1out.position_m, o2out.position_m, o3out.position_m] = gauss_solver(...
+                    los1, los2, los3, ...
+                    chile1.position_m, chile2.position_m, chile3.position_m, ...
+                    t1, t2, t3);
+
+                o1out.epoch = chile1.epoch;
+                o2out.epoch = chile2.epoch;
+                o3out.epoch = chile3.epoch;
+                
+                chileLLA.epoch = o1out.epoch;
+                o1out.aer = aer(o1out, chile1);
+                chileLLA.epoch = o2out.epoch;
+                o2out.aer = aer(o2out, chile2);
+                chileLLA.epoch = o3out.epoch;
+                o3out.aer = aer(o3out, chile3);
+
+                az1res = obs1.azimuth_deg - o1out.aer.azimuth_deg;
+                el1res = obs1.elevation_deg - o1out.aer.elevation_deg;
+
+                az2res = obs2.azimuth_deg - o2out.aer.azimuth_deg;
+                el2res = obs2.elevation_deg - o2out.aer.elevation_deg;
+
+                az3res = obs3.azimuth_deg - o3out.aer.azimuth_deg;
+                el3res = obs3.elevation_deg - o3out.aer.elevation_deg;
+
+                RMS = (az1res)^2 + (el1res)^2; 
+                RMS = (az2res)^2 + (el2res)^2;
+                RMS = (az3res)^2 + (el3res)^2;
+                RMS = sqrt( RMS/3 );
+
+                azErr(n) = az1res;
+                azErr(k) = az2res;
+                azErr(l) = az3res;
+                elErr(n) = el1res;
+                elErr(k) = el2res;
+                elErr(l) = el3res;
+
+                % Save RMS values for distribution analysis (histogram?):
+                mixedRMSDistribution(mixCounter) = RMS;
+
+                if (RMS < minRMS)
+                    minRMS = RMS;
+                    index1 = n;
+                    %{
+                    R1 = o1out.position_m;
+                    R2 = o2out.position_m;
+                    R3 = o3out.position_m;
+                    %}
+
+                    %{
+                    [V1, V2, V3] = gibbs_solver(...
+                        R1,R2,R3,consts.mu_earth_km*1e9);
+                    %}
+                    %R1_final = R1;
+                    index2 = k;
+                    %R2_final = R2;
+                    index3 = l;
+                    %R3_final = R3;
+                end
+
+%                fprintf('count: %d, obs nums: %d , %d , %d, residual: %0.3f  m\n',...
+%                    mixCounter, obs1.obsNumber, obs2.obsNumber, obs3.obsNumber, RMS);
+
+
+%                [V1, V2, V3] = gibbs_solver(...
+%                    R1, R2, R3, consts.mu_earth_km*1e9);
+
+            end
+%{
+            % get residual RMS value for nth dataset
+            nthResidual = 0;
+        
+            for m = 1:3
+                observedAZ;
+                predAZ;
+                observedEL;
+                predEL;
+                nthResidual = nthResidual + sqrt((1/N)*((- nthAZ)^2 + (- nthEL)^2));
+            end
+        
+            % Check if better solution exists:
+            if (nthResidual < bestResidual)
+                bestResidual = nthResidual;
+                bestObservation = nthObservation;
+            end
+                %}
+        end
+    end    
+end
+
+% STOP TIMER:
+timeOut = toc;
+
+% Final observation triplet:
+
+% First observation, n / "enn":
+final1.obsNumber = sampleVector.obsNumber(index1);
+final1.epoch = sampleVector.datetimes(index1);
+final1.azimuth_deg = sampleVector.azimuths(index1);
+final1.elevation_deg = sampleVector.elevations(index1);
+final1.range_m = 5000;
+final1.right_ascension_deg = sampleVector.ras(index1);
+final1.declination_deg = sampleVector.declinations(index1);
+chile1.position_m = chileObservatory.position_m;
+chile1.epoch = final1.epoch;
+chile1.latitude_deg = chileLLA.latitude_deg;
+chile1.longitude_deg = chileLLA.longitude_deg;
+chile1.altitude_m = chileLLA.altitude_m;
+%final1ECI = eci(final1, chile1);
+%final1ECI.position_m = final1ECI.position_m / norm(final1ECI.position_m);
+
+% Second observation, k / "kay":
+final2.obsNumber = sampleVector.obsNumber(index2);
+final2.epoch = sampleVector.datetimes(index2);
+final2.azimuth_deg = sampleVector.azimuths(index2);
+final2.elevation_deg = sampleVector.elevations(index2);
+final2.right_ascension_deg = sampleVector.ras(index2);
+final2.declination_deg = sampleVector.declinations(index2);
+final2.range_m = 5000;
+chile2.position_m = chileObservatory.position_m;
+chile2.epoch = final2.epoch;
+chile2.latitude_deg = chileLLA.latitude_deg;
+chile2.longitude_deg = chileLLA.longitude_deg;
+chile2.altitude_m = chileLLA.altitude_m;
+%final2ECI = eci(final2, chile2);
+%final2ECI.position_m = final2ECI.position_m / norm(final2ECI.position_m);
+
+% Third observation, l / "ell":
+final3.obsNumber = sampleVector.obsNumber(index3);
+final3.epoch = sampleVector.datetimes(index3);
+final3.azimuth_deg = sampleVector.azimuths(index3);
+final3.elevation_deg = sampleVector.elevations(index3);
+final3.right_ascension_deg = sampleVector.ras(index3);
+final3.declination_deg = sampleVector.declinations(index3);
+final3.range_m = 5000;
+chile3.position_m = chileObservatory.position_m;
+chile3.epoch = final3.epoch;
+chile3.latitude_deg = chileLLA.latitude_deg;
+chile3.longitude_deg = chileLLA.longitude_deg;
+chile3.altitude_m = chileLLA.altitude_m;
+%final3ECI = eci(final3, chile3);
+%final3ECI.position_m = final3ECI.position_m / norm(final3ECI.position_m);
+
+t1 = second(final1.epoch, 'secondofday');
+t2 = second(final2.epoch, 'secondofday');
+t3 = second(final3.epoch, 'secondofday');
+
+% Get line of sight vectors:
+[finalLOS1, finalLOS2, finalLOS3] = get_los(...
+    final1.right_ascension_deg, final1.declination_deg, ...
+    final2.right_ascension_deg, final2.declination_deg, ...
+    final3.right_ascension_deg, final3.declination_deg);
+
+[R1FinalMixed.position_m, R2FinalMixed.position_m, R3FinalMixed.position_m] = gauss_solver(...
+    finalLOS1, finalLOS2, finalLOS3, ...
+    chile1.position_m, chile2.position_m, chile3.position_m, ...
+    t1, t2, t3);
+
+titleOfMixedGraph = "Mixed Times: good data";
+
+try
+
+    [V1FinalMixed, V2FinalMixed, V3FinalMixed] = gibbs_solver(...
+        R1FinalMixed.position_m, R2FinalMixed.position_m, R3FinalMixed.position_m, ...
+        consts.mu_earth_km*1e9);
+
+catch ME
+
+    warning('Bad data in Mixed dataset. Using dummy orbit.');
+    titleOfMixedGraph = "mixed bad data";
+
+
+    warning('Bad position vectors in Beginning data set.  Replacing w/ dummy set.');
+    beginningGraphTitle = "Mixed Times:  BAD data";
+
+    % Load representative data set:
+    goodData = load('goodObservations.mat');
+
+    % Good observation triplet:
+    R1FinalMixed.position_m = goodData.goodPositions(:,1);
+    R2FinalMixed.position_m = goodData.goodPositions(:,2);
+    R3FinalMixed.position_m = goodData.goodPositions(:,3);
+    V1FinalMixed = goodData.goodVelocities(:,1);
+    V2FinalMixed = goodData.goodVelocities(:,2);
+    V3FinalMixed = goodData.goodVelocities(:,3);
+end
+
+% Create histogram of data:
+figure('Name', 'Histogram of Mixed Beg./Mid./End RMS Distribution');
+histogram(mixedRMSDistribution);
+title('Histogram of Mixed Beg./Mid./End RMS Distribution - Team 12, ENAE441');
+
+xIn1 = [R1FinalMixed.position_m; V1FinalMixed];
+xIn2 = [R2FinalMixed.position_m; V2FinalMixed];
+xIn3 = [R3FinalMixed.position_m; V3FinalMixed];
+tRange = [0 12*60*60];
+
+[tOut, orbit1FinalMixed] = ode45(@propagate_2BP, tRange, xIn1, [], consts.mu_earth_km*1e9);
+[tOut, orbit2FinalMixed] = ode45(@propagate_2BP, tRange, xIn2, [], consts.mu_earth_km*1e9);
+[tOut, orbit3FinalMixed] = ode45(@propagate_2BP, tRange, xIn3, [], consts.mu_earth_km*1e9);
+
+%{
+figure('Name', 'Initial Orbit Plot');
+plot3(orbit1FinalMixed(:,1), orbit1FinalMixed(:,2), orbit1FinalMixed(:,3), 'Color', 'r');
+hold on;
+plot3(orbit2FinalMixed(:,1), orbit2FinalMixed(:,2), orbit2FinalMixed(:,3), 'Color', 'g');
+hold on;
+plot3(orbit2FinalMixed(:,1), orbit2FinalMixed(:,2), orbit2FinalMixed(:,3), 'Color', 'b');
+title(titleOfMixedGraph);
+%}
+
+fprintf('\n%s', titleOfMixedGraph);
+
+fprintf('\n\nMixed Observation Triplet:  ( %d, %d, %d ) [obs. no.],  Min. RMS: %0.4f deg.\n', ...
+    final1.obsNumber, final2.obsNumber, final3.obsNumber, minRMS);
+
+fprintf('Mixed Sample Size: %d , Time Elapsed: %0.1f seconds\n\n', ...
+    sampleSize, timeOut);
